@@ -4,6 +4,29 @@ GitOps repo for the homelab Kubernetes cluster. Flux watches this repo and
 reconciles the cluster to match it — cluster changes flow through git commits,
 not `kubectl apply`.
 
+## Context
+
+Learning Kubernetes by migrating self-hosted internal tools from ad-hoc
+Docker containers (accessed by VPNing into the host via Tailscale and hitting
+ports) to a k8s cluster managed via GitOps. A single app wouldn't justify
+k8s; a multi-app homelab does. Dockge was considered and ruled out before
+this (Docker-compose-specific, doesn't apply on k8s).
+
+## Services
+
+- **Vikunja** — task management (the original motivating app)
+- **tldraw** — whiteboard (stateless; good low-risk ingress practice)
+- **Grafana** + **Prometheus** — dashboards + metrics (monitoring the cluster
+  itself is an early win)
+- **PostgreSQL** (shared, general-purpose) + **Adminer** — DB + web admin UI
+- **Git server** (Gitea/Forgejo) — will also host custom apps that talk to
+  the other services
+- **Splash page** — reachable on plain :80 (e.g. `http://homelab/`), links to
+  everything else
+- **Flux image automation** — the Watchtower replacement: updates image tags
+  in this repo via git commits, Flux applies them (cluster state always flows
+  through git)
+
 ## Decisions
 
 | Topic | Decision |
@@ -16,6 +39,24 @@ not `kubectl apply`.
 | Repo home | GitHub for bootstrap; may migrate to self-hosted Gitea/Forgejo later |
 | Remote access | Tailscale operator — Services get their own tailnet MagicDNS names |
 | Secrets | SOPS + age (Flux-native); set up when the first secret is needed (Tailscale OAuth creds) |
+
+**Networking model:** Tailscale operator and Traefik serve different purposes
+and both are used. The operator gives individual Services their own tailnet
+identity/MagicDNS name for secure remote access (replacing the old "VPN into
+the host, hit a port" pattern); Traefik handles LAN-friendly routing and the
+plain-:80 splash page.
+
+**Day-to-day cluster poking** (the Dockge-replacement role, separate from
+GitOps): try k9s (terminal) and/or Headlamp; Lens and Portainer are the other
+candidates. Not yet decided.
+
+## Still open
+
+- [ ] Whether the splash page is LAN-only via Traefik, or also exposed on the
+      tailnet
+- [ ] Whether custom apps (hosted on the self-hosted git server) get built as
+      container images automatically (CI) or manually for now
+- [ ] k9s vs Headlamp vs Lens vs Portainer for day-to-day visualization
 
 ## Layout
 
