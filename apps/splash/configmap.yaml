@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: splash-html
+data:
+  index.html: |
+    <!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>homelab</title>
+      <style>
+        body { font-family: system-ui, sans-serif; max-width: 40rem;
+               margin: 4rem auto; padding: 0 1rem; }
+        li { margin: 0.5rem 0; }
+      </style>
+    </head>
+    <body>
+      <h1>homelab</h1>
+      <p>Services (links go live as each one is migrated):</p>
+      <ul>
+        <li>Vikunja — tasks</li>
+        <li>tldraw — whiteboard</li>
+        <li>Grafana — dashboards</li>
+        <li>Adminer — database admin</li>
+        <li>Git server</li>
+      </ul>
+    </body>
+    </html>
