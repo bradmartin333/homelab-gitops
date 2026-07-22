@@ -308,7 +308,8 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
 - [x] 3. Splash page reachable on :80 via Traefik (`curl http://homelab.lan/` → 200)
 - [x] 4. Postgres + Adminer — StatefulSet + 5Gi local-path PVC; SOPS-encrypted
       credentials; Adminer tailnet-only at `postgres-adminer-ts.tail87ca97.ts.net`
-- [ ] 5. Vikunja, pointed at shared Postgres
+- [x] 5. Vikunja (2.4.0) → dedicated db/role on shared Postgres; SOPS secrets;
+      HTTPS at `vikunja.tail87ca97.ts.net` (37 tables migrated OK)
 - [ ] 6. Grafana + Prometheus
 - [ ] 7. tldraw
 - [ ] 8. Self-hosted git server (Gitea/Forgejo); maybe migrate this repo into it

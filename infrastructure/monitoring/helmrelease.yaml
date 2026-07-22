@@ -1,0 +1,76 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+  namespace: monitoring
+spec:
+  interval: 1h
+  timeout: 15m   # first install pulls several images on arm64; give it room
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: "87.x"
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+  values:
+    # --- Components that don't apply to single-node k3s ---
+    # k3s runs the control plane as one embedded process, so these separate
+    # scrape targets don't exist and would sit permanently "down".
+    kubeEtcd:
+      enabled: false
+    kubeControllerManager:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeProxy:
+      enabled: false
+
+    alertmanager:
+      # keep the stack lighter on the Pi; enable later if we want routing
+      enabled: false
+
+    prometheus:
+      prometheusSpec:
+        retention: 15d
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            memory: 1500Mi
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: local-path
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 10Gi
+        # scrape ServiceMonitors/PodMonitors from all namespaces, not just
+        # those with the release's helm labels — so our apps can opt in later.
+        serviceMonitorSelectorNilUsesHelmValues: false
+        podMonitorSelectorNilUsesHelmValues: false
+
+    grafana:
+      # admin password comes from a SOPS-managed secret (see secret.sops.yaml)
+      admin:
+        existingSecret: grafana-admin
+        userKey: admin-user
+        passwordKey: admin-password
+      persistence:
+        enabled: true
+        storageClassName: local-path
+        size: 2Gi
+      # served over HTTPS on the tailnet via the operator (same pattern as
+      # Adminer/Vikunja). Grafana needs to know its external URL for redirects.
+      grafana.ini:
+        server:
+          root_url: https://grafana.tail87ca97.ts.net/
+      ingress:
+        enabled: true
+        ingressClassName: tailscale
+        hosts: []          # tailscale ingress uses tls.hosts for the name
+        tls:
+          - hosts:
+              - grafana
