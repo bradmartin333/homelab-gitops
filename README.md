@@ -325,4 +325,40 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
       server would solve a problem we don't have, and keeping Flux's source on
       GitHub avoids the cluster depending on a git server it hosts itself.
       Custom-apps-in-cluster goal is already met via GitHub + Docker Hub.
-- [ ] 9. Flux image automation (Watchtower replacement)
+- [x] 9. Flux image automation (Watchtower replacement) — image-reflector +
+      image-automation controllers installed via `--components-extra`.
+      Auto-updates node-tldraw (semver `>=2.0.0`), vikunja (2.x), adminer (5.x)
+      and splash/nginx (`x.y.z-alpine`); **Postgres deliberately excluded**
+      (major DB bumps can need migrations). Grafana/Prometheus come from a Helm
+      chart, so they're updated by bumping the chart version, not image
+      automation. Each automated `image:` line carries an `$imagepolicy` setter
+      comment; `flux-image-updates` commits tag bumps to `main` as `fluxcdbot`.
+
+## Operations notes
+
+**Resource limits (added after a node outage).** The Pi once went unreachable —
+pingable, but sshd/k3s/tailscaled all down — the signature of node-level memory
+exhaustion. Cause: almost no workload declared memory limits, so any pod could
+grow until the kernel OOM-spiral took out system daemons. Every app container
+and the kube-prometheus-stack components now declare requests+limits, so a
+misbehaving pod is OOM-killed on its own instead of taking down the node.
+Keep this in mind when adding a service: **always set a memory limit.**
+
+> Total *limits* will read as >100% of node memory (`kubectl describe node`).
+> That's expected and fine — limits are ceilings, not reservations. What
+> matters is *requests* (~20%) and real usage (~50%). Completed k3s bootstrap
+> jobs also inflate the number without consuming anything.
+
+**Node IP is DHCP** and changes with the interface (Wi-Fi vs Ethernet). Always
+connect by name (`homelab.lan`, or the tailnet name off-LAN); consider a DHCP
+reservation. Stale `.lan` DNS can point at an old lease — check `hostname -I`
+on the Pi if something suddenly can't connect.
+
+**Useful checks**
+```sh
+flux get kustomizations          # all three should be Ready
+flux get image policy            # which tag each automation resolves to
+kubectl top node                 # live CPU/memory
+kubectl get pods -A | grep -v "Running\|Completed"
+kubectl logs -n flux-system deploy/kustomize-controller --tail=50
+```

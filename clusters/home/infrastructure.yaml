@@ -7,7 +7,10 @@ spec:
   interval: 10m
   path: ./infrastructure
   prune: true
-  wait: true
+  # No `wait: true`: waiting on health checks for every infra resource made
+  # each reconcile take ~7min (Helm releases + image-automation objects) and
+  # gated `apps` behind it the whole time. HelmReleases already manage their
+  # own readiness, so we drop the blanket wait and let reconciles finish fast.
   sourceRef:
     kind: GitRepository
     name: flux-system
