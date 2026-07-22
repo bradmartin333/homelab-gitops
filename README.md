@@ -75,18 +75,98 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
 
 1. **Provision the Pi** — Raspberry Pi OS Lite (64-bit) via Raspberry Pi
    Imager. In Imager's settings, set hostname (`homelab`), user, and SSH
-   public key; use Ethernet. Boot from USB SSD if possible (SD cards wear out
-   under Postgres/Prometheus write load). Then enable the memory cgroup
-   (required by k3s): append `cgroup_memory=1 cgroup_enable=memory` to the
-   line in `/boot/firmware/cmdline.txt` and reboot.
-2. **Install k3s** (Traefik + local-path storage included):
+   public key; use Ethernet. Boot from USB SSD (SD cards wear out under
+   Postgres/Prometheus write load).
+
+   > As built: Pi 4 (8GB), 256GB external SSD as the boot/root drive,
+   > reachable at `brad@homelab.lan`. Verify with:
+   > `ssh brad@homelab.lan 'uname -m'` → should print `aarch64`.
+
+2. **Enable the memory cgroup** (required by k3s; Pi OS ships with it off).
+   Append the two params to the **single line** in
+   `/boot/firmware/cmdline.txt` — a stray
+   newline breaks boot, so back it up and append in place rather than editing
+   by hand, then reboot:
    ```sh
-   curl -sfL https://get.k3s.io | sh -
-   # copy /etc/rancher/k3s/k3s.yaml to ~/.kube/config on your workstation,
-   # replacing 127.0.0.1 with the host's address
+   ssh brad@homelab.lan '
+     sudo cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak &&
+     sudo sed -i "s/[[:space:]]*$/ cgroup_memory=1 cgroup_enable=memory/" /boot/firmware/cmdline.txt &&
+     cat /boot/firmware/cmdline.txt
+   '
+   # cmdline.txt has no trailing newline, so `wc -l` reads 0 — that is fine.
+   # What matters: it is still ONE physical line with the two params at the end.
+   ssh brad@homelab.lan 'sudo reboot'
+   # after it comes back (~25s), confirm the memory controller is enabled.
+   # Pi OS uses cgroup v2, so check the unified hierarchy, NOT /proc/cgroups
+   # (which never lists memory under v2 and will look like it failed):
+   ssh brad@homelab.lan 'cat /sys/fs/cgroup/cgroup.controllers'
+   # → must include `memory`, e.g. "cpuset cpu io memory pids"
    ```
-3. **Install the Flux CLI** on your workstation: `brew install fluxcd/tap/flux`
-4. **Bootstrap Flux** against this repo (creates `clusters/home/flux-system/`
+3. **Install k3s** (Traefik + local-path storage included). Before installing,
+   drop a config file so the API server's serving cert covers the names you'll
+   connect by — otherwise `kubectl` from other machines fails TLS verification
+   (the default cert is only valid for `homelab`, `localhost`, etc.):
+   ```sh
+   ssh brad@homelab.lan 'sudo tee /etc/rancher/k3s/config.yaml >/dev/null <<EOF
+   tls-san:
+     - homelab
+     - homelab.lan
+     - 192.168.1.100
+     # add the Tailscale MagicDNS name here once the tailnet is up, e.g.
+     # - homelab.<tailnet>.ts.net
+   EOF'
+   ssh brad@homelab.lan 'curl -sfL https://get.k3s.io | sh -'
+   ```
+   > As built: took `stable`, which resolved to **v1.36.2+k3s1** (arm64).
+   >
+   > If you edit `tls-san` *after* k3s is already running, the cert won't
+   > regenerate on its own — delete it and restart so it's rebuilt:
+   > ```sh
+   > ssh brad@homelab.lan 'sudo rm -f \
+   >   /var/lib/rancher/k3s/server/tls/serving-kube-apiserver.crt \
+   >   /var/lib/rancher/k3s/server/tls/serving-kube-apiserver.key \
+   >   && sudo systemctl restart k3s'
+   > ```
+
+   Sanity check on the host:
+   ```sh
+   ssh brad@homelab.lan 'sudo k3s kubectl get nodes'   # STATUS Ready
+   ```
+
+4. **Get cluster access on your devices.** k3s writes an admin kubeconfig at
+   `/etc/rancher/k3s/k3s.yaml` on the Pi, pointing at `127.0.0.1`. For any
+   remote machine, copy it and rewrite the server address to a name the cert
+   covers (a `tls-san` from step 3).
+
+   **macOS / Linux workstation** (what this repo was set up from):
+   ```sh
+   mkdir -p ~/.kube
+   [ -f ~/.kube/config ] && cp ~/.kube/config ~/.kube/config.bak.$(date +%s)
+   ssh brad@homelab.lan 'sudo cat /etc/rancher/k3s/k3s.yaml' \
+     | sed -e 's#https://127.0.0.1:6443#https://homelab.lan:6443#' \
+           -e 's/: default/: homelab/g' -e 's/name: default/name: homelab/g' \
+     > ~/.kube/config
+   chmod 600 ~/.kube/config
+   kubectl get nodes           # confirm reachable
+   ```
+   To keep multiple clusters, write to a separate file and merge instead:
+   `KUBECONFIG=~/.kube/config:~/.kube/homelab.yaml kubectl config view --flatten`.
+
+   **Windows** — same idea; the config lives at `%USERPROFILE%\.kube\config`.
+   Pull the file (e.g. `scp brad@homelab.lan:...` via sudo, or copy it out),
+   and replace `https://127.0.0.1:6443` with `https://homelab.lan:6443`.
+
+   **Phone / off-LAN, via Tailscale:** `homelab.lan` only resolves on the LAN.
+   Once the Tailscale operator is up (step 6) the *cluster's* Services get
+   tailnet names, but to reach the *API server* from your phone, also install
+   Tailscale on the Pi itself so the node has a stable MagicDNS name
+   (`homelab.<tailnet>.ts.net`). Add that name to `tls-san` (step 3), then use
+   it as the server address in the kubeconfig. Mobile kubectl apps (e.g.
+   Kubernetes-native dashboards, or a Headlamp/k9s session over SSH) then work
+   from anywhere on the tailnet.
+
+5. **Install the Flux CLI** on your workstation: `brew install fluxcd/tap/flux`
+6. **Bootstrap Flux** against this repo (creates `clusters/home/flux-system/`
    and commits it):
    ```sh
    export GITHUB_TOKEN=<personal access token with repo scope>
@@ -97,7 +177,7 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
      --path=clusters/home \
      --personal
    ```
-5. **Tailscale operator secret** — create an OAuth client in the Tailscale
+7. **Tailscale operator secret** — create an OAuth client in the Tailscale
    admin console (scopes: `devices:write`, `auth_keys:write`; tag
    `tag:k8s-operator`), then:
    ```sh
@@ -105,11 +185,11 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
      --from-literal=client_id=<id> --from-literal=client_secret=<secret>
    ```
    (Move this into git via SOPS once secrets management is set up.)
-6. Watch it converge: `flux get kustomizations --watch`
+8. Watch it converge: `flux get kustomizations --watch`
 
 ## Phased plan
 
-- [ ] 1. k3s up on the Pi
+- [x] 1. k3s up on the Pi (v1.36.2+k3s1; kubectl works from the Mac)
 - [ ] 2. Flux bootstrapped; tailscale operator reconciled, one test Service on the tailnet
 - [ ] 3. Splash page reachable on :80 via Traefik
 - [ ] 4. Postgres + Adminer (first real app: PVCs + Secrets)
