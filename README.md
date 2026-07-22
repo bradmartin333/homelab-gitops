@@ -128,14 +128,19 @@ sops --encrypt --in-place apps/<app>/secret.sops.yaml
 
 The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
 
+> Placeholders below: `<user>` is the Pi's Linux login, `tailXXXXXX.ts.net` is
+> your own tailnet's MagicDNS suffix (`tailscale status --json`), `100.x.y.z`
+> the node's tailnet IP, and `192.168.x.*` your LAN subnet. Substitute your
+> own throughout.
+
 1. **Provision the Pi** — Raspberry Pi OS Lite (64-bit) via Raspberry Pi
    Imager. In Imager's settings, set hostname (`homelab`), user, and SSH
    public key; use Ethernet. Boot from USB SSD (SD cards wear out under
    Postgres/Prometheus write load).
 
    > As built: Pi 4 (8GB), 256GB external SSD as the boot/root drive,
-   > reachable at `brad@homelab.lan`. Verify with:
-   > `ssh brad@homelab.lan 'uname -m'` → should print `aarch64`.
+   > reachable at `<user>@homelab.lan`. Verify with:
+   > `ssh <user>@homelab.lan 'uname -m'` → should print `aarch64`.
 
 2. **Enable the memory cgroup** (required by k3s; Pi OS ships with it off).
    Append the two params to the **single line** in
@@ -143,18 +148,18 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
    newline breaks boot, so back it up and append in place rather than editing
    by hand, then reboot:
    ```sh
-   ssh brad@homelab.lan '
+   ssh <user>@homelab.lan '
      sudo cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak &&
      sudo sed -i "s/[[:space:]]*$/ cgroup_memory=1 cgroup_enable=memory/" /boot/firmware/cmdline.txt &&
      cat /boot/firmware/cmdline.txt
    '
    # cmdline.txt has no trailing newline, so `wc -l` reads 0 — that is fine.
    # What matters: it is still ONE physical line with the two params at the end.
-   ssh brad@homelab.lan 'sudo reboot'
+   ssh <user>@homelab.lan 'sudo reboot'
    # after it comes back (~25s), confirm the memory controller is enabled.
    # Pi OS uses cgroup v2, so check the unified hierarchy, NOT /proc/cgroups
    # (which never lists memory under v2 and will look like it failed):
-   ssh brad@homelab.lan 'cat /sys/fs/cgroup/cgroup.controllers'
+   ssh <user>@homelab.lan 'cat /sys/fs/cgroup/cgroup.controllers'
    # → must include `memory`, e.g. "cpuset cpu io memory pids"
    ```
 3. **Install k3s** (Traefik + local-path storage included). Before installing,
@@ -162,15 +167,15 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
    connect by — otherwise `kubectl` from other machines fails TLS verification
    (the default cert is only valid for `homelab`, `localhost`, etc.):
    ```sh
-   ssh brad@homelab.lan 'sudo tee /etc/rancher/k3s/config.yaml >/dev/null <<EOF
+   ssh <user>@homelab.lan 'sudo tee /etc/rancher/k3s/config.yaml >/dev/null <<EOF
    tls-san:
      - homelab
      - homelab.lan
-     - homelab.tail87ca97.ts.net   # Tailscale MagicDNS (added in step, below)
-     - 192.168.1.99                # eth0 DHCP address
-     - 192.168.1.100               # prior wlan0 address (fallback)
+     - homelab.tailXXXXXX.ts.net   # Tailscale MagicDNS (added in step, below)
+     - 192.168.x.99                # eth0 DHCP address
+     - 192.168.x.100               # prior wlan0 address (fallback)
    EOF'
-   ssh brad@homelab.lan 'curl -sfL https://get.k3s.io | sh -'
+   ssh <user>@homelab.lan 'curl -sfL https://get.k3s.io | sh -'
    ```
    > As built: took `stable`, which resolved to **v1.36.2+k3s1** (arm64).
    >
@@ -184,7 +189,7 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
    > If you edit `tls-san` *after* k3s is already running, the cert won't
    > regenerate on its own — delete it and restart so it's rebuilt:
    > ```sh
-   > ssh brad@homelab.lan 'sudo rm -f \
+   > ssh <user>@homelab.lan 'sudo rm -f \
    >   /var/lib/rancher/k3s/server/tls/serving-kube-apiserver.crt \
    >   /var/lib/rancher/k3s/server/tls/serving-kube-apiserver.key \
    >   && sudo systemctl restart k3s'
@@ -192,7 +197,7 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
 
    Sanity check on the host:
    ```sh
-   ssh brad@homelab.lan 'sudo k3s kubectl get nodes'   # STATUS Ready
+   ssh <user>@homelab.lan 'sudo k3s kubectl get nodes'   # STATUS Ready
    ```
 
 4. **Get cluster access on your devices.** k3s writes an admin kubeconfig at
@@ -204,7 +209,7 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
    ```sh
    mkdir -p ~/.kube
    [ -f ~/.kube/config ] && cp ~/.kube/config ~/.kube/config.bak.$(date +%s)
-   ssh brad@homelab.lan 'sudo cat /etc/rancher/k3s/k3s.yaml' \
+   ssh <user>@homelab.lan 'sudo cat /etc/rancher/k3s/k3s.yaml' \
      | sed -e 's#https://127.0.0.1:6443#https://homelab.lan:6443#' \
            -e 's/: default/: homelab/g' -e 's/name: default/name: homelab/g' \
      > ~/.kube/config
@@ -215,7 +220,7 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
    `KUBECONFIG=~/.kube/config:~/.kube/homelab.yaml kubectl config view --flatten`.
 
    **Windows** — same idea; the config lives at `%USERPROFILE%\.kube\config`.
-   Pull the file (e.g. `scp brad@homelab.lan:...` via sudo, or copy it out),
+   Pull the file (e.g. `scp <user>@homelab.lan:...` via sudo, or copy it out),
    and replace `https://127.0.0.1:6443` with `https://homelab.lan:6443`.
 
    **Phone / off-LAN:** `homelab.lan` only resolves on the LAN. Use the
@@ -228,16 +233,16 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
    regardless of LAN DHCP). Auth is interactive: run `up`, open the printed
    URL, approve the device.
    ```sh
-   ssh brad@homelab.lan 'curl -fsSL https://tailscale.com/install.sh | sh'
-   ssh brad@homelab.lan 'sudo tailscale up --hostname=homelab --accept-dns=false'
+   ssh <user>@homelab.lan 'curl -fsSL https://tailscale.com/install.sh | sh'
+   ssh <user>@homelab.lan 'sudo tailscale up --hostname=homelab --accept-dns=false'
    # --accept-dns=false keeps the Pi's own resolver (SSH by homelab.lan still
    # works). Grab the assigned MagicDNS name:
-   ssh brad@homelab.lan 'sudo tailscale status --json' | grep -o '"DNSName": *"homelab[^"]*"'
+   ssh <user>@homelab.lan 'sudo tailscale status --json' | grep -o '"DNSName": *"homelab[^"]*"'
    ```
-   > As built: node joined as `homelab` → `homelab.tail87ca97.ts.net`
-   > (tailnet IP `100.92.53.11`). This name was added to `tls-san` in step 3
+   > As built: node joined as `homelab` → `homelab.tailXXXXXX.ts.net`
+   > (tailnet IP `100.x.y.z`). This name was added to `tls-san` in step 3
    > (cert regenerated). To use it from a phone/off-LAN device, set the
-   > kubeconfig server to `https://homelab.tail87ca97.ts.net:6443`. A mobile
+   > kubeconfig server to `https://homelab.tailXXXXXX.ts.net:6443`. A mobile
    > kubectl/dashboard app on the tailnet then reaches the cluster from
    > anywhere.
 
@@ -307,14 +312,14 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
 - [x] 2. Flux bootstrapped (v2.9.2); tailscale operator reconciled & on the tailnet
 - [x] 3. Splash page reachable on :80 via Traefik (`curl http://homelab.lan/` → 200)
 - [x] 4. Postgres + Adminer — StatefulSet + 5Gi local-path PVC; SOPS-encrypted
-      credentials; Adminer tailnet-only HTTPS at `adminer.tail87ca97.ts.net`
+      credentials; Adminer tailnet-only HTTPS at `adminer.tailXXXXXX.ts.net`
 - [x] 5. Vikunja (2.4.0) → dedicated db/role on shared Postgres; SOPS secrets;
-      HTTPS at `vikunja.tail87ca97.ts.net` (37 tables migrated OK)
+      HTTPS at `vikunja.tailXXXXXX.ts.net` (37 tables migrated OK)
 - [x] 6. Grafana + Prometheus — kube-prometheus-stack; 11 scrape targets up;
-      Grafana HTTPS at `grafana.tail87ca97.ts.net` (SOPS admin secret)
+      Grafana HTTPS at `grafana.tailXXXXXX.ts.net` (SOPS admin secret)
 - [x] 7. tldraw — self-built persistent+multiplayer sync server
       (bradmartin333/node-tldraw:2.0.0), SQLite on a 2Gi PVC, HTTPS at
-      `tldraw.tail87ca97.ts.net`. First custom app in the cluster.
+      `tldraw.tailXXXXXX.ts.net`. First custom app in the cluster.
 - [~] 8. Self-hosted git server — **skipped by choice.** Staying on GitHub for
       this GitOps repo and for custom apps (e.g. node-tldraw); a self-hosted
       server would solve a problem we don't have, and keeping Flux's source on
