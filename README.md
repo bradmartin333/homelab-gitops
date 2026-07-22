@@ -69,6 +69,45 @@ apps/                 the actual services, one directory each
 
 Flux applies `infrastructure/` first, then `apps/` (declared via `dependsOn`).
 
+## Secrets (SOPS + age)
+
+Secrets are committed to git **encrypted** with [SOPS](https://github.com/getsops/sops)
+using an [age](https://github.com/FiloSottile/age) key. Flux decrypts them in
+the cluster at apply time. Only `data`/`stringData` values are encrypted; k8s
+metadata (name, namespace) stays readable in git for review.
+
+> ⚠️ **The age private key is the master key to every secret in this repo.**
+> It lives in two places and is **never** committed:
+> - `~/.config/sops/age/keys.txt` on the admin workstation (back this up
+>   somewhere safe — a password manager — or you can never decrypt again)
+> - the `sops-age` secret in the `flux-system` namespace (how Flux decrypts)
+>
+> Public key (safe, it's in `.sops.yaml`):
+> `age1rectewyjyw259ks6e8epgac022665n88yf9ep64fe7kky92thgkq8tfs7e`
+
+One-time setup (already done):
+```sh
+brew install sops age
+age-keygen -o ~/.config/sops/age/keys.txt          # generate keypair
+# load private key into the cluster for Flux to decrypt with:
+cat ~/.config/sops/age/keys.txt | kubectl create secret generic sops-age \
+  -n flux-system --from-file=age.agekey=/dev/stdin
+# .sops.yaml pins the public key; each Flux Kustomization has a
+# `decryption: { provider: sops, secretRef: { name: sops-age } }` block.
+```
+
+**Adding an encrypted secret** (the recurring workflow):
+```sh
+# sops doesn't auto-find the key at ~/.config/sops/age/keys.txt on macOS —
+# export this once (add to your shell profile) so encrypt/edit/decrypt work:
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
+# 1. write the Secret manifest as plaintext, filename ending in .sops.yaml
+# 2. encrypt in place (sops picks up rules from .sops.yaml):
+sops --encrypt --in-place apps/<app>/secret.sops.yaml
+# 3. add it to that app's kustomization.yaml resources, commit. Done.
+# To edit later: `sops apps/<app>/secret.sops.yaml` (decrypts, re-encrypts on save).
+```
+
 ## Bootstrap runbook
 
 The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
@@ -111,13 +150,20 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
    tls-san:
      - homelab
      - homelab.lan
-     - 192.168.1.100
-     # add the Tailscale MagicDNS name here once the tailnet is up, e.g.
-     # - homelab.<tailnet>.ts.net
+     - homelab.tail87ca97.ts.net   # Tailscale MagicDNS (added in step, below)
+     - 192.168.1.99                # eth0 DHCP address
+     - 192.168.1.100               # prior wlan0 address (fallback)
    EOF'
    ssh brad@homelab.lan 'curl -sfL https://get.k3s.io | sh -'
    ```
    > As built: took `stable`, which resolved to **v1.36.2+k3s1** (arm64).
+   >
+   > Heads up on the node IP: it's DHCP and **changes with the interface** —
+   > the Pi came up on `.100` over Wi-Fi, then `.99` once moved to Ethernet.
+   > Connecting by *name* (`homelab.lan` / the tailnet name) sidesteps this;
+   > for stability, set a DHCP reservation on the router. The Tailscale
+   > MagicDNS name above was added later (see the Tailscale step) and is the
+   > only address that also works off-LAN.
    >
    > If you edit `tls-san` *after* k3s is already running, the cert won't
    > regenerate on its own — delete it and restart so it's rebuilt:
@@ -156,42 +202,94 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
    Pull the file (e.g. `scp brad@homelab.lan:...` via sudo, or copy it out),
    and replace `https://127.0.0.1:6443` with `https://homelab.lan:6443`.
 
-   **Phone / off-LAN, via Tailscale:** `homelab.lan` only resolves on the LAN.
-   Once the Tailscale operator is up (step 6) the *cluster's* Services get
-   tailnet names, but to reach the *API server* from your phone, also install
-   Tailscale on the Pi itself so the node has a stable MagicDNS name
-   (`homelab.<tailnet>.ts.net`). Add that name to `tls-san` (step 3), then use
-   it as the server address in the kubeconfig. Mobile kubectl apps (e.g.
-   Kubernetes-native dashboards, or a Headlamp/k9s session over SSH) then work
-   from anywhere on the tailnet.
+   **Phone / off-LAN:** `homelab.lan` only resolves on the LAN. Use the
+   Tailscale MagicDNS name instead (set up in step 5) as the kubeconfig server
+   address — it's already in `tls-san`. See that step for details.
 
-5. **Install the Flux CLI** on your workstation: `brew install fluxcd/tap/flux`
-6. **Bootstrap Flux** against this repo (creates `clusters/home/flux-system/`
-   and commits it):
+5. **Install Tailscale on the node** (distinct from the in-cluster Tailscale
+   *operator* in step 7: this gives the **Pi itself** a stable tailnet
+   identity, so SSH and the k8s API work from off-LAN — e.g. your phone —
+   regardless of LAN DHCP). Auth is interactive: run `up`, open the printed
+   URL, approve the device.
    ```sh
-   export GITHUB_TOKEN=<personal access token with repo scope>
+   ssh brad@homelab.lan 'curl -fsSL https://tailscale.com/install.sh | sh'
+   ssh brad@homelab.lan 'sudo tailscale up --hostname=homelab --accept-dns=false'
+   # --accept-dns=false keeps the Pi's own resolver (SSH by homelab.lan still
+   # works). Grab the assigned MagicDNS name:
+   ssh brad@homelab.lan 'sudo tailscale status --json' | grep -o '"DNSName": *"homelab[^"]*"'
+   ```
+   > As built: node joined as `homelab` → `homelab.tail87ca97.ts.net`
+   > (tailnet IP `100.92.53.11`). This name was added to `tls-san` in step 3
+   > (cert regenerated). To use it from a phone/off-LAN device, set the
+   > kubeconfig server to `https://homelab.tail87ca97.ts.net:6443`. A mobile
+   > kubectl/dashboard app on the tailnet then reaches the cluster from
+   > anywhere.
+
+6. **Install the Flux CLI** on your workstation: `brew install fluxcd/tap/flux`
+   (as built: v2.9.2). Pre-flight: `flux check --pre`.
+7. **Bootstrap Flux** against this repo (creates `clusters/home/flux-system/`
+   and commits it). Flux needs a GitHub token with `repo` scope; easiest is to
+   reuse the `gh` CLI login:
+   ```sh
+   brew install gh          # if needed
+   gh auth login            # GitHub.com → HTTPS → browser; grants `repo` scope
+   export GITHUB_TOKEN=$(gh auth token)
    flux bootstrap github \
-     --owner=<github-username> \
+     --owner=bradmartin333 \
      --repository=homelab-gitops \
      --branch=main \
      --path=clusters/home \
-     --personal
+     --personal              # repo is under a personal account (private)
    ```
-7. **Tailscale operator secret** — create an OAuth client in the Tailscale
-   admin console (scopes: `devices:write`, `auth_keys:write`; tag
-   `tag:k8s-operator`), then:
+8. **Tailscale operator secret** — the in-cluster operator (distinct from the
+   node's own tailscale login in step 5) authenticates to your tailnet with an
+   **OAuth client**. Until the `operator-oauth` secret exists, the operator pod
+   sits in `ContainerCreating` with `FailedMount ... secret "operator-oauth"
+   not found`, so the `infrastructure` Kustomization stays "in progress"
+   (it has `wait: true`).
+
+   a. **Access Controls** (ACL editor) → add tag owners, Save:
+   ```json
+   "tagOwners": {
+     "tag:k8s-operator": ["autogroup:admin"],
+     "tag:k8s":          ["tag:k8s-operator"]
+   }
+   ```
+   `tag:k8s-operator` is the operator's own identity; `tag:k8s` is what it
+   applies to the Service proxy devices it creates.
+
+   b. **Settings → OAuth clients → Generate** — scope `Devices: Core` **Write**
+   (grants the auth-keys write it needs), tag `tag:k8s-operator`. Copy the
+   Client ID and Secret.
+
+   c. Create the secret (namespace already exists, made by Flux). The operator
+   is in a mount-retry loop, so it picks this up within ~1m — no restart:
    ```sh
    kubectl create secret generic operator-oauth -n tailscale \
-     --from-literal=client_id=<id> --from-literal=client_secret=<secret>
+     --from-literal=client_id='<id>' --from-literal=client_secret='<secret>'
    ```
-   (Move this into git via SOPS once secrets management is set up.)
-8. Watch it converge: `flux get kustomizations --watch`
+   (Move this into git via SOPS once secrets management is set up — until then
+   it's the one piece of cluster state not in git.)
+9. Watch it converge: `flux get kustomizations --watch`
+   (`infrastructure` → Ready once the operator is up, then `apps` applies.)
+
+   Two snags we hit here, both recoverable:
+   - **Operator `403: calling actor does not have enough permissions`** when
+     minting its auth key → the OAuth client's tag wasn't valid yet. Fix the
+     ACL `tagOwners` (step 8a) and ensure the client has `Auth Keys: Write` +
+     tag `tag:k8s-operator`; the operator retries on pod restart. Check with
+     `kubectl logs -n tailscale -l app=operator`.
+   - **HelmRelease stuck `Failed` / "timeout waiting for Deployment"** — while
+     the operator crash-looped on the 403, the Helm install's 5m timer expired
+     and marked the release failed, even though the Deployment recovered after.
+     Clear the stale state with a forced retry:
+     `flux reconcile helmrelease tailscale-operator -n tailscale --force`.
 
 ## Phased plan
 
 - [x] 1. k3s up on the Pi (v1.36.2+k3s1; kubectl works from the Mac)
-- [ ] 2. Flux bootstrapped; tailscale operator reconciled, one test Service on the tailnet
-- [ ] 3. Splash page reachable on :80 via Traefik
+- [x] 2. Flux bootstrapped (v2.9.2); tailscale operator reconciled & on the tailnet
+- [x] 3. Splash page reachable on :80 via Traefik (`curl http://homelab.lan/` → 200)
 - [ ] 4. Postgres + Adminer (first real app: PVCs + Secrets)
 - [ ] 5. Vikunja, pointed at shared Postgres
 - [ ] 6. Grafana + Prometheus

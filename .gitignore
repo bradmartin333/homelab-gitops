@@ -1,0 +1,14 @@
+# Local planning notes, not part of the deployed state.
+reference/**
+
+# Secret key material — MUST never be committed. The age private key lives in
+# ~/.config/sops/age/keys.txt on the admin workstation and in-cluster as the
+# `sops-age` secret. Encrypted `*.sops.yaml` files ARE committed (safe); these
+# patterns guard against accidentally adding a raw key or an unencrypted dump.
+*.agekey
+keys.txt
+age-key*.txt
+
+# Local kubeconfig copies, if ever placed in-repo by mistake.
+kubeconfig
+*.kubeconfig

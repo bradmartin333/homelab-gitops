@@ -1,0 +1,10 @@
+# SOPS encryption rules. The private half of this age key lives on the admin
+# workstation (~/.config/sops/age/keys.txt) and in the cluster as the
+# `sops-age` secret in flux-system (used by Flux to decrypt at apply time).
+# Committing an encrypted secret: name the file `*.sops.yaml` and run
+#   sops --encrypt --in-place <file>
+# Only `data`/`stringData` values are encrypted; k8s metadata stays readable.
+creation_rules:
+  - path_regex: .*\.sops\.yaml$
+    encrypted_regex: ^(data|stringData)$
+    age: age1rectewyjyw259ks6e8epgac022665n88yf9ep64fe7kky92thgkq8tfs7e

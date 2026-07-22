@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adminer
+  namespace: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adminer
+  template:
+    metadata:
+      labels:
+        app: adminer
+    spec:
+      containers:
+        - name: adminer
+          image: adminer:5
+          ports:
+            - containerPort: 8080
+          env:
+            # pre-fill the server field with the in-cluster Postgres DNS name
+            - name: ADMINER_DEFAULT_SERVER
+              value: postgres.postgres.svc.cluster.local
+---
+# ClusterIP for in-cluster use.
+apiVersion: v1
+kind: Service
+metadata:
+  name: adminer
+  namespace: postgres
+spec:
+  selector:
+    app: adminer
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+# Tailscale-only exposure: the operator watches for Services of type
+# LoadBalancer with class `tailscale` and gives this one its own tailnet
+# device + MagicDNS name (`adminer.<tailnet>.ts.net`). Not on the LAN, not
+# public — reachable only from devices on your tailnet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: adminer-ts
+  namespace: postgres
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector:
+    app: adminer
+  ports:
+    - port: 80
+      targetPort: 8080
