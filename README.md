@@ -312,6 +312,8 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
       HTTPS at `vikunja.tail87ca97.ts.net` (37 tables migrated OK)
 - [x] 6. Grafana + Prometheus — kube-prometheus-stack; 11 scrape targets up;
       Grafana HTTPS at `grafana.tail87ca97.ts.net` (SOPS admin secret)
-- [ ] 7. tldraw
+- [x] 7. tldraw — self-built persistent+multiplayer sync server
+      (bradmartin333/node-tldraw:2.0.0), SQLite on a 2Gi PVC, HTTPS at
+      `tldraw.tail87ca97.ts.net`. First custom app in the cluster.
 - [ ] 8. Self-hosted git server (Gitea/Forgejo); maybe migrate this repo into it
 - [ ] 9. Flux image automation (Watchtower replacement)

@@ -1,5 +1,7 @@
 # Persistent, multiplayer tldraw via a self-built sync server
-# (github.com/bradmartin333/node-tldraw). One port (3000) serves the editor
+# (github.com/bradmartin333/node-tldraw). See KNOWN-ISSUES.md for the canvas
+# "flicker" bug (a server-side WS-upgrade 404, fixed in the node-tldraw repo).
+# One port (3000) serves the editor
 # SPA, the board API, and the sync WebSocket — same-origin, so no CORS and no
 # public-URL config needed; the client derives wss:// from window.location,
 # which works as-is behind the Tailscale HTTPS proxy.
