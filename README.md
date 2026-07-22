@@ -310,7 +310,8 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
       credentials; Adminer tailnet-only at `postgres-adminer-ts.tail87ca97.ts.net`
 - [x] 5. Vikunja (2.4.0) → dedicated db/role on shared Postgres; SOPS secrets;
       HTTPS at `vikunja.tail87ca97.ts.net` (37 tables migrated OK)
-- [ ] 6. Grafana + Prometheus
+- [x] 6. Grafana + Prometheus — kube-prometheus-stack; 11 scrape targets up;
+      Grafana HTTPS at `grafana.tail87ca97.ts.net` (SOPS admin secret)
 - [ ] 7. tldraw
 - [ ] 8. Self-hosted git server (Gitea/Forgejo); maybe migrate this repo into it
 - [ ] 9. Flux image automation (Watchtower replacement)
