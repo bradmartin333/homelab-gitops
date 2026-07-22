@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: vikunja
-          image: vikunja/vikunja:2.4.0
+          image: vikunja/vikunja:2.4.0 # {"$imagepolicy": "flux-system:vikunja"}
           ports:
             - containerPort: 3456
           env:

@@ -1,0 +1,33 @@
+# The engine: scans the ImagePolicies below, and when a newer tag is selected,
+# writes the new tag into the marked `image:` line in the repo and commits +
+# pushes. Flux then reconciles the change like any other git commit.
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageUpdateAutomation
+metadata:
+  name: flux-image-updates
+  namespace: flux-system
+spec:
+  interval: 30m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        name: fluxcdbot
+        email: fluxcdbot@users.noreply.github.com
+      messageTemplate: |
+        chore(images): auto-update image tags
+
+        Automated by Flux image automation.
+        {{ range .Changed.Changes }}
+        - {{ .OldValue }} -> {{ .NewValue }} ({{ .Setter }})
+        {{ end }}
+    push:
+      branch: main
+  update:
+    path: ./
+    strategy: Setters

@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: adminer
-          image: adminer:5
+          image: adminer:5 # {"$imagepolicy": "flux-system:adminer"}
           ports:
             - containerPort: 8080
           env:

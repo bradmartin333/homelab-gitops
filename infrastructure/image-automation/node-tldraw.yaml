@@ -1,0 +1,24 @@
+# node-tldraw: your custom app. Track semver >=2.0.0 so new builds you tag
+# (e.g. 2.0.1, 2.1.0) auto-deploy, but major jumps are still under your control
+# via the range. The `image:` line in apps/tldraw/tldraw.yaml carries the
+# matching $imagepolicy setter comment.
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: node-tldraw
+  namespace: flux-system
+spec:
+  image: bradmartin333/node-tldraw
+  interval: 30m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: node-tldraw
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: node-tldraw
+  policy:
+    semver:
+      range: ">=2.0.0"

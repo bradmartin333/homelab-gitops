@@ -37,7 +37,7 @@ spec:
     spec:
       containers:
         - name: tldraw
-          image: bradmartin333/node-tldraw:2.0.0
+          image: bradmartin333/node-tldraw:2.0.0 # {"$imagepolicy": "flux-system:node-tldraw"}
           ports:
             - containerPort: 3000
           env:

@@ -1,0 +1,80 @@
+# Third-party app images we let auto-update (Postgres is intentionally NOT
+# here — a major DB bump can require a data migration, so it stays manually
+# pinned). Grafana/Prometheus also aren't here: they come from a Helm chart,
+# not an `image:` line, so they're updated by bumping the chart version instead.
+
+# --- Vikunja: semver, track the 2.x line ---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: vikunja
+  namespace: flux-system
+spec:
+  image: vikunja/vikunja
+  interval: 6h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: vikunja
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: vikunja
+  policy:
+    semver:
+      range: ">=2.4.0 <3.0.0"
+---
+# --- Adminer: tags are single-number majors (4, 5). Track the 5.x major so we
+# don't jump to a new major automatically. ---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: adminer
+  namespace: flux-system
+spec:
+  image: adminer
+  interval: 6h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: adminer
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: adminer
+  # keep only bare-major tags (e.g. "5"), pick the highest; avoids matching
+  # feature-tagged variants like "5-standalone".
+  filterTags:
+    pattern: '^[0-9]+$'
+  policy:
+    numerical:
+      order: asc
+---
+# --- Splash (nginx): tags look like 1.27-alpine. Extract the x.y number for
+# semver ordering while keeping the -alpine flavour. ---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: nginx
+  namespace: flux-system
+spec:
+  image: nginx
+  interval: 6h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: nginx
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: nginx
+  filterTags:
+    # match "<major>.<minor>-alpine", capture the version for ordering
+    pattern: '^(?P<ver>\d+\.\d+)-alpine$'
+    extract: '$ver'
+  policy:
+    semver:
+      range: ">=1.27.0"
