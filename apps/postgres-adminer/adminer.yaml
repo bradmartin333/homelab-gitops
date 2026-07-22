@@ -36,20 +36,25 @@ spec:
     - port: 8080
       targetPort: 8080
 ---
-# Tailscale-only exposure: the operator watches for Services of type
-# LoadBalancer with class `tailscale` and gives this one its own tailnet
-# device + MagicDNS name (`adminer.<tailnet>.ts.net`). Not on the LAN, not
-# public — reachable only from devices on your tailnet.
-apiVersion: v1
-kind: Service
+# Tailscale-only exposure over HTTPS. The operator's `tailscale` IngressClass
+# gives this its own tailnet device + MagicDNS name and serves it with a valid
+# Tailscale-issued *.ts.net TLS cert (requires HTTPS certs enabled on the
+# tailnet). Reachable only from devices on the tailnet — not LAN, not public.
+# Loads cleanly in any browser (no plain-HTTP / HTTPS-First-Mode issue).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: adminer-ts
+  name: adminer
   namespace: postgres
 spec:
-  type: LoadBalancer
-  loadBalancerClass: tailscale
-  selector:
-    app: adminer
-  ports:
-    - port: 80
-      targetPort: 8080
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: adminer
+      port:
+        number: 8080
+  tls:
+    # The operator uses this host as the device name and cert domain. It must
+    # be a bare label; the operator appends your tailnet's MagicDNS suffix.
+    - hosts:
+        - adminer

@@ -290,7 +290,8 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
 - [x] 1. k3s up on the Pi (v1.36.2+k3s1; kubectl works from the Mac)
 - [x] 2. Flux bootstrapped (v2.9.2); tailscale operator reconciled & on the tailnet
 - [x] 3. Splash page reachable on :80 via Traefik (`curl http://homelab.lan/` → 200)
-- [ ] 4. Postgres + Adminer (first real app: PVCs + Secrets)
+- [x] 4. Postgres + Adminer — StatefulSet + 5Gi local-path PVC; SOPS-encrypted
+      credentials; Adminer tailnet-only at `postgres-adminer-ts.tail87ca97.ts.net`
 - [ ] 5. Vikunja, pointed at shared Postgres
 - [ ] 6. Grafana + Prometheus
 - [ ] 7. tldraw
