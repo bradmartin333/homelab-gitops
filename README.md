@@ -307,7 +307,7 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
 - [x] 2. Flux bootstrapped (v2.9.2); tailscale operator reconciled & on the tailnet
 - [x] 3. Splash page reachable on :80 via Traefik (`curl http://homelab.lan/` → 200)
 - [x] 4. Postgres + Adminer — StatefulSet + 5Gi local-path PVC; SOPS-encrypted
-      credentials; Adminer tailnet-only at `postgres-adminer-ts.tail87ca97.ts.net`
+      credentials; Adminer tailnet-only HTTPS at `adminer.tail87ca97.ts.net`
 - [x] 5. Vikunja (2.4.0) → dedicated db/role on shared Postgres; SOPS secrets;
       HTTPS at `vikunja.tail87ca97.ts.net` (37 tables migrated OK)
 - [x] 6. Grafana + Prometheus — kube-prometheus-stack; 11 scrape targets up;
@@ -315,5 +315,9 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
 - [x] 7. tldraw — self-built persistent+multiplayer sync server
       (bradmartin333/node-tldraw:2.0.0), SQLite on a 2Gi PVC, HTTPS at
       `tldraw.tail87ca97.ts.net`. First custom app in the cluster.
-- [ ] 8. Self-hosted git server (Gitea/Forgejo); maybe migrate this repo into it
+- [~] 8. Self-hosted git server — **skipped by choice.** Staying on GitHub for
+      this GitOps repo and for custom apps (e.g. node-tldraw); a self-hosted
+      server would solve a problem we don't have, and keeping Flux's source on
+      GitHub avoids the cluster depending on a git server it hosts itself.
+      Custom-apps-in-cluster goal is already met via GitHub + Docker Hub.
 - [ ] 9. Flux image automation (Watchtower replacement)
