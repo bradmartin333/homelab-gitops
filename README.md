@@ -334,6 +334,58 @@ The cluster host is a Raspberry Pi; `kubectl`/`flux` run from your workstation.
       automation. Each automated `image:` line carries an `$imagepolicy` setter
       comment; `flux-image-updates` commits tag bumps to `main` as `fluxcdbot`.
 
+## Next steps: multi-node
+
+The cluster is one Pi, so it has one of everything: one control plane, one
+disk, one thing to lose. Adding nodes is the obvious next move, but it's worth
+being precise about what each step actually buys — plain worker nodes add
+**capacity**, not **availability**, because of the storage constraint below.
+
+**What blocks resilience today:** every PVC in this repo uses
+`storageClassName: local-path` (Postgres, Vikunja, tldraw, Prometheus,
+Grafana), which is a directory on *this* node's SSD. A pod with a local-path
+PVC **cannot** be rescheduled onto another node — it goes `Pending` instead.
+So adding workers makes the stateless pieces (splash, Adminer) survive a node
+loss while every stateful service stays pinned. Replicated storage is what
+turns extra nodes into actual robustness.
+
+- [ ] 10. **Backups — do this first, independent of node count.** A dead SSD
+      currently loses Vikunja, tldraw, and all metrics history. A scheduled
+      `pg_dump` plus PVC snapshots pushed somewhere off-cluster protects
+      against the one failure mode that destroys data rather than just causing
+      downtime. Cheaper than everything below and strictly more valuable.
+- [ ] 11. **Add 2 worker Pis.** Directly addresses the memory exhaustion in
+      Operations notes — more headroom so Prometheus and Postgres stop
+      competing. One command per Pi:
+      ```sh
+      # on the server node, get the join token:
+      sudo cat /var/lib/rancher/k3s/server/node-token
+      # on each new Pi (same Pi OS Lite 64-bit + SSD build as the server):
+      curl -sfL https://get.k3s.io | K3S_URL=https://homelab.lan:6443 \
+        K3S_TOKEN=<token> sh -
+      ```
+      Then `kubectl get nodes` from the Mac shows them `Ready`. Use
+      `nodeSelector`/taints to keep Prometheus off whichever node hosts
+      Postgres. Note the DHCP caveat — give each Pi a reservation, since
+      `K3S_URL` and the token are baked into the agent's systemd unit.
+- [ ] 12. **Longhorn for replicated storage.** This is where robustness
+      actually arrives: volumes replicate across nodes, so a node loss no
+      longer takes its data with it, and it adds snapshots + backup targets
+      (S3/NFS). Wants ≥3 nodes (default replica count 3) and a dedicated disk
+      per node, and costs meaningful CPU/RAM on Pi-class hardware. Migration
+      is per-PVC: create a Longhorn-class PVC, copy data across, repoint the
+      workload — do it one service at a time, lowest-stakes first (tldraw
+      before Postgres).
+- [ ] 13. **HA control plane — optional, probably last.** Today, losing
+      `homelab` means Flux and `kubectl` stop working and nothing reschedules,
+      even though workers keep existing pods alive. True HA needs 3 servers
+      with embedded etcd (`--cluster-init` on the first, `--server` on the
+      rest); etcd is write-heavy, so SSDs are mandatory and SD cards are not
+      an option. For a homelab, a *documented rebuild path* is arguably worth
+      more: this repo plus the age key reproduces the whole cluster, so losing
+      the control-plane Pi is a re-bootstrap rather than data loss —
+      **provided step 12 (or at minimum step 10) is done.**
+
 ## Operations notes
 
 **Resource limits (added after a node outage).** The Pi once went unreachable —
