@@ -3,8 +3,7 @@ kind: Kustomization
 resources:
   - splash
   - postgres-adminer
-  # Added per phased plan (see README):
-  # - vikunja
+  - vikunja
   # - monitoring
   # - tldraw
   # - git-server

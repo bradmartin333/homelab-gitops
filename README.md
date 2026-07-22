@@ -46,6 +46,22 @@ identity/MagicDNS name for secure remote access (replacing the old "VPN into
 the host, hit a port" pattern); Traefik handles LAN-friendly routing and the
 plain-:80 splash page.
 
+**Web UIs on the tailnet use HTTPS** via a `tailscale`-class **Ingress** (not a
+plain LoadBalancer Service) — the operator issues a real Let's Encrypt
+`*.ts.net` cert, so browsers load it with no warning (plain HTTP breaks under
+Chrome's HTTPS-First Mode). Requires HTTPS certs enabled once at
+admin console → DNS → HTTPS Certificates. Pattern (see
+`apps/postgres-adminer/adminer.yaml`): a ClusterIP Service for the app + an
+Ingress with `ingressClassName: tailscale` and `tls.hosts: [<bare-label>]`;
+the app then lives at `https://<bare-label>.<tailnet>.ts.net`. Use this for
+every web UI (Adminer, Vikunja, Grafana, …).
+
+> Testing note: the Pi node joined with `--accept-dns=false`, so *the Pi
+> itself* can't resolve `*.ts.net` MagicDNS names or route to tailnet peers —
+> curling a service from the Pi fails/times out even when it's healthy. Test
+> from a full tailnet client (your Mac/phone) instead. The TLS cert can still
+> be probed directly: `openssl s_client -connect <peer-ip>:443 -servername …`.
+
 **Day-to-day cluster poking** (the Dockge-replacement role, separate from
 GitOps): try k9s (terminal) and/or Headlamp; Lens and Portainer are the other
 candidates. Not yet decided.

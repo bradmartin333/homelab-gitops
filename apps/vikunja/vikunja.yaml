@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vikunja-files
+  namespace: vikunja
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vikunja
+  namespace: vikunja
+spec:
+  replicas: 1
+  # file uploads live on a RWO PVC, so don't run two pods at once
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vikunja
+  template:
+    metadata:
+      labels:
+        app: vikunja
+    spec:
+      containers:
+        - name: vikunja
+          image: vikunja/vikunja:2.4.0
+          ports:
+            - containerPort: 3456
+          env:
+            - name: VIKUNJA_DATABASE_TYPE
+              value: postgres
+            - name: VIKUNJA_DATABASE_HOST
+              value: postgres.postgres.svc.cluster.local
+            - name: VIKUNJA_DATABASE_USER
+              value: vikunja
+            - name: VIKUNJA_DATABASE_DATABASE
+              value: vikunja
+            # public URL for api<->frontend + email links (HTTPS tailnet name)
+            - name: VIKUNJA_SERVICE_PUBLICURL
+              value: https://vikunja.tail87ca97.ts.net/
+            - name: VIKUNJA_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-secrets
+                  key: VIKUNJA_DATABASE_PASSWORD
+            - name: VIKUNJA_SERVICE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-secrets
+                  key: VIKUNJA_SERVICE_SECRET
+          volumeMounts:
+            - name: files
+              mountPath: /app/vikunja/files
+          readinessProbe:
+            httpGet:
+              path: /api/v1/info
+              port: 3456
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/info
+              port: 3456
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: files
+          persistentVolumeClaim:
+            claimName: vikunja-files
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vikunja
+  namespace: vikunja
+spec:
+  selector:
+    app: vikunja
+  ports:
+    - port: 3456
+      targetPort: 3456
+---
+# Tailnet-only HTTPS (same pattern as Adminer): operator issues a *.ts.net
+# cert; reachable at https://vikunja.<tailnet>.ts.net from tailnet devices.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vikunja
+  namespace: vikunja
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: vikunja
+      port:
+        number: 3456
+  tls:
+    - hosts:
+        - vikunja
