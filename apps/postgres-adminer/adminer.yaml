@@ -22,6 +22,12 @@ spec:
             # pre-fill the server field with the in-cluster Postgres DNS name
             - name: ADMINER_DEFAULT_SERVER
               value: postgres.postgres.svc.cluster.local
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
 ---
 # ClusterIP for in-cluster use.
 apiVersion: v1

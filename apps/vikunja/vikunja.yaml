@@ -58,6 +58,12 @@ spec:
           volumeMounts:
             - name: files
               mountPath: /app/vikunja/files
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
           readinessProbe:
             httpGet:
               path: /api/v1/info

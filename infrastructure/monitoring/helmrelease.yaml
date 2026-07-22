@@ -30,15 +30,29 @@ spec:
       # keep the stack lighter on the Pi; enable later if we want routing
       enabled: false
 
+    # Cap the small always-on components so nothing on the node is unbounded.
+    prometheus-node-exporter:
+      resources:
+        requests: { cpu: 10m, memory: 24Mi }
+        limits: { memory: 64Mi }
+    kube-state-metrics:
+      resources:
+        requests: { cpu: 10m, memory: 48Mi }
+        limits: { memory: 128Mi }
+    prometheusOperator:
+      resources:
+        requests: { cpu: 20m, memory: 64Mi }
+        limits: { memory: 192Mi }
+
     prometheus:
       prometheusSpec:
         retention: 15d
         resources:
           requests:
             cpu: 100m
-            memory: 512Mi
+            memory: 400Mi
           limits:
-            memory: 1500Mi
+            memory: 900Mi
         storageSpec:
           volumeClaimTemplate:
             spec:
@@ -58,6 +72,12 @@ spec:
         existingSecret: grafana-admin
         userKey: admin-user
         passwordKey: admin-password
+      resources:
+        requests:
+          cpu: 25m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
       persistence:
         enabled: true
         storageClassName: local-path
