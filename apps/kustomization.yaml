@@ -4,6 +4,7 @@ resources:
   - splash
   - postgres-adminer
   - vikunja
+  - tldraw
   # - monitoring
   # - tldraw
   # - git-server

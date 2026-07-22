@@ -1,0 +1,96 @@
+# Persistent, multiplayer tldraw via a self-built sync server
+# (github.com/bradmartin333/node-tldraw). One port (3000) serves the editor
+# SPA, the board API, and the sync WebSocket — same-origin, so no CORS and no
+# public-URL config needed; the client derives wss:// from window.location,
+# which works as-is behind the Tailscale HTTPS proxy.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tldraw-data
+  namespace: tldraw
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tldraw
+  namespace: tldraw
+spec:
+  replicas: 1
+  # SQLite on a RWO volume: never run two pods against the same data at once
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tldraw
+  template:
+    metadata:
+      labels:
+        app: tldraw
+    spec:
+      containers:
+        - name: tldraw
+          image: bradmartin333/node-tldraw:2.0.0
+          ports:
+            - containerPort: 3000
+          env:
+            # image defaults PORT=3000 and SYNC_DB_DIR=/data; set explicitly
+            # so the manifest is self-documenting and probe/port stay in sync.
+            - name: PORT
+              value: "3000"
+            - name: SYNC_DB_DIR
+              value: /data
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tldraw-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tldraw
+  namespace: tldraw
+spec:
+  selector:
+    app: tldraw
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+# Tailnet-only HTTPS (same pattern as Adminer/Vikunja/Grafana). The operator's
+# proxy handles the WebSocket upgrade for /sync, so multiplayer works over wss.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tldraw
+  namespace: tldraw
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: tldraw
+      port:
+        number: 3000
+  tls:
+    - hosts:
+        - tldraw
