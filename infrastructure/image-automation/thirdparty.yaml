@@ -72,8 +72,11 @@ spec:
   imageRepositoryRef:
     name: nginx
   filterTags:
-    # match "<major>.<minor>-alpine", capture the version for ordering
-    pattern: '^(?P<ver>\d+\.\d+)-alpine$'
+    # Match only full three-part "<major>.<minor>.<patch>-alpine" tags and
+    # capture the version. Two-part tags like "1.31-alpine" are NOT valid
+    # semver (no patch), which makes the semver policy fail to order them;
+    # the flavour variants (-perl, -alpine3.24) are excluded by the anchors.
+    pattern: '^(?P<ver>\d+\.\d+\.\d+)-alpine$'
     extract: '$ver'
   policy:
     semver:
