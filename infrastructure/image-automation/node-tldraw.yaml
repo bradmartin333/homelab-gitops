@@ -2,7 +2,7 @@
 # (e.g. 2.0.1, 2.1.0) auto-deploy, but major jumps are still under your control
 # via the range. The `image:` line in apps/tldraw/tldraw.yaml carries the
 # matching $imagepolicy setter comment.
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: node-tldraw
@@ -11,7 +11,7 @@ spec:
   image: bradmartin333/node-tldraw
   interval: 30m
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: node-tldraw

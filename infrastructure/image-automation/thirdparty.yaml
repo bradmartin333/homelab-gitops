@@ -4,7 +4,7 @@
 # not an `image:` line, so they're updated by bumping the chart version instead.
 
 # --- Vikunja: semver, track the 2.x line ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: vikunja
@@ -13,7 +13,7 @@ spec:
   image: vikunja/vikunja
   interval: 6h
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: vikunja
@@ -27,7 +27,7 @@ spec:
 ---
 # --- Adminer: tags are single-number majors (4, 5). Track the 5.x major so we
 # don't jump to a new major automatically. ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: adminer
@@ -36,7 +36,7 @@ spec:
   image: adminer
   interval: 6h
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: adminer
@@ -54,7 +54,7 @@ spec:
 ---
 # --- Splash (nginx): tags look like 1.27-alpine. Extract the x.y number for
 # semver ordering while keeping the -alpine flavour. ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: nginx
@@ -63,7 +63,7 @@ spec:
   image: nginx
   interval: 6h
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: nginx
